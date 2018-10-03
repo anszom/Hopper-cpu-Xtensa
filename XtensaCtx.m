@@ -128,6 +128,8 @@
 enum OperandType {
 	Operand_NONE,
 	Operand_REG,
+	Operand_REGW,
+	Operand_REGRW,
 	Operand_IMM,
 	Operand_MEM_INDEX,
 	Operand_RELU,
@@ -209,37 +211,38 @@ static int64_t specreg(int64_t val)
 
 struct  Format  fmt_NONE	= {3, {}};
 struct  Format  fmt_NNONE	= {2, {}};
-struct  Format  fmt_RRR		= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}, {Operand_REG, 4, 4}}};
-struct  Format  fmt_RRR_extui	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8, 1, 16}, {Operand_IMM, 4, 20, .off=1}}};
+struct  Format  fmt_RRR		= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 8}, {Operand_REG, 4, 4}}};
+struct  Format  fmt_RRR_extui	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8, 1, 16}, {Operand_IMM, 4, 20, .off=1}}};
 struct  Format  fmt_RRR_1imm	= {3, {{Operand_IMM, 4, 8},}};
 struct  Format  fmt_RRR_2imm	= {3, {{Operand_IMM, 4, 8}, {Operand_IMM, 4, 4}}};
-struct  Format  fmt_RRR_immr	= {3, {{Operand_REG, 4, 4}, {Operand_IMM, 4, 8}}};
-struct  Format  fmt_RRR_2r	= {3, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}}};
-struct  Format  fmt_RRR_2rr	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 4}}};
-struct  Format  fmt_RRR_sll	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}}};
-struct  Format  fmt_RRR_slli	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}, {Operand_IMM, 4, 4, 1, 20, .xlate=shimm}}};
-struct  Format  fmt_RRR_srai	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8, 1, 20}}};
-struct  Format  fmt_RRR_sh	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8}}};
-struct  Format  fmt_RRR_ssa	= {3, {{Operand_REG, 4, 8},}};
+struct  Format  fmt_RRR_immr	= {3, {{Operand_REGW, 4, 4}, {Operand_IMM, 4, 8}}};
+struct  Format  fmt_RRR_2r	= {3, {{Operand_REGW, 4, 4}, {Operand_REG, 4, 8}}};
+struct  Format  fmt_RRR_2rr	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 4}}};
+struct  Format  fmt_RRR_sll	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 8}}};
+struct  Format  fmt_RRR_slli	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 8}, {Operand_IMM, 4, 4, 1, 20, .xlate=shimm}}};
+struct  Format  fmt_RRR_srai	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8, 1, 20}}};
+struct  Format  fmt_RRR_sh	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 4}, {Operand_IMM, 4, 8}}};
+struct  Format  fmt_RRR_ssa	= {3, {{Operand_REG, 4, 8},}}; // FIXME writes to SAR
 struct  Format  fmt_RRR_ssai	= {3, {{Operand_IMM, 4, 8, 1, 4},}};
-struct  Format  fmt_RRI8	= {3, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}, {Operand_IMM, 8, 16, .signext = true}}};
-struct  Format  fmt_RRI8_addmi	= {3, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}, {Operand_IMM, 8, 16, .signext = true, .vshift=8, .bitwidth = 32}}};
-struct  Format  fmt_RRI8_i12	= {3, {{Operand_REG, 4, 4}, {Operand_IMM, 8, 16, 4, 8, .bitwidth = 16 }}};
-struct  Format  fmt_RRI8_disp	= {3, {{Operand_REG, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=0, .regbase={4, 8}}}};
-struct  Format  fmt_RRI8_disp16	= {3, {{Operand_REG, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=1, .bitwidth = 16, .regbase={4, 8}}}};
-struct  Format  fmt_RRI8_disp32	= {3, {{Operand_REG, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=2, .bitwidth = 32, .regbase={4, 8}}}};
-struct  Format  fmt_RRI8_b	= {3, {{Operand_REG, 4, 8}, {Operand_REG, 4, 4}, {Operand_RELA, 8, 16}}};
-struct  Format  fmt_RRI8_bb	= {3, {{Operand_REG, 4, 8}, {Operand_IMM, 4, 4, 1, 12}, {Operand_RELA, 8, 16}}};
-struct  Format  fmt_RI16	= {3, {{Operand_REG, 4, 4}, {Operand_MEM, 16, 8, .bitwidth = 32 }}};
-struct  Format  fmt_BRI8	= {3, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}, {Operand_RELA, 8, 16}}};
-struct  Format  fmt_BRI8_imm	= {3, {{Operand_REG, 4, 8}, {Operand_IMM, 4, 12, .xlate = b4const}, {Operand_RELA, 8, 16}}};
-struct  Format  fmt_BRI8_immu	= {3, {{Operand_REG, 4, 8}, {Operand_IMM, 4, 12, .xlate = b4constu}, {Operand_RELA, 8, 16}}};
-struct  Format  fmt_BRI12	= {3, {{Operand_REG, 4, 8}, {Operand_RELA, 12, 12}}};
+struct  Format  fmt_RRI8	= {3, {{Operand_REGW, 4, 4}, {Operand_REG, 4, 8}, {Operand_IMM, 8, 16, .signext = true}}};
+struct  Format  fmt_RRI8_addmi	= {3, {{Operand_REGW, 4, 4}, {Operand_REG, 4, 8}, {Operand_IMM, 8, 16, .signext = true, .vshift=8, .bitwidth = 32}}};
+struct  Format  fmt_RRI8_i12	= {3, {{Operand_REGW, 4, 4}, {Operand_IMM, 8, 16, 4, 8, .bitwidth = 16 }}};
+struct  Format  fmt_RRI8_disp	= {3, {{Operand_REGW, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=0, .regbase={4, 8}}}};
+struct  Format  fmt_RRI8_disp16	= {3, {{Operand_REGW, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=1, .bitwidth = 16, .regbase={4, 8}}}};
+struct  Format  fmt_RRI8_disp32	= {3, {{Operand_REGW, 4, 4}, {Operand_MEM_INDEX, 8, 16, .vshift=2, .bitwidth = 32, .regbase={4, 8}}}};
+struct  Format  fmt_RRI8_b	= {3, {{Operand_REGW, 4, 8}, {Operand_REG, 4, 4}, {Operand_RELA, 8, 16}}};
+struct  Format  fmt_RRI8_bb	= {3, {{Operand_REGW, 4, 8}, {Operand_IMM, 4, 4, 1, 12}, {Operand_RELA, 8, 16}}};
+struct  Format  fmt_RI16	= {3, {{Operand_REGW, 4, 4}, {Operand_MEM, 16, 8, .bitwidth = 32 }}};
+struct  Format  fmt_BRI8	= {3, {{Operand_REGW, 4, 12}, {Operand_REG, 4, 8}, {Operand_RELA, 8, 16}}};
+struct  Format  fmt_BRI8_imm	= {3, {{Operand_REGW, 4, 8}, {Operand_IMM, 4, 12, .xlate = b4const}, {Operand_RELA, 8, 16}}};
+struct  Format  fmt_BRI8_immu	= {3, {{Operand_REGW, 4, 8}, {Operand_IMM, 4, 12, .xlate = b4constu}, {Operand_RELA, 8, 16}}};
+struct  Format  fmt_BRI12	= {3, {{Operand_REGW, 4, 8}, {Operand_RELA, 12, 12}}};
 struct  Format  fmt_CALL	= {3, {{Operand_RELA, 18, 6},}};
 struct  Format  fmt_CALL_sh	= {3, {{Operand_RELAL, 18, 6},}};
 struct  Format  fmt_CALLX	= {3, {{Operand_REG, 4, 8},}};
-struct  Format  fmt_RSR		= {3, {{Operand_REG, 8, 8, .xlate=specreg}, {Operand_REG, 4, 4}}};
-struct  Format  fmt_RSR_spec	= {3, {{Operand_REG, 4, 4},}};
+struct  Format  fmt_RSR		= {3, {{Operand_REG, 8, 8, .xlate=specreg}, {Operand_REGW, 4, 4}}};
+struct  Format  fmt_WSR		= {3, {{Operand_REGW, 8, 8, .xlate=specreg}, {Operand_REG, 4, 4}}};
+struct  Format  fmt_XSR		= {3, {{Operand_REGRW, 8, 8, .xlate=specreg}, {Operand_REG, 4, 4}}};
 struct  Format  fmt_RRRN	= {2, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}, {Operand_REG, 4, 4}}};
 struct  Format  fmt_RRRN_addi	= {2, {{Operand_REG, 4, 12}, {Operand_REG, 4, 8}, {Operand_IMM, 4, 4, .xlate=addin}}};
 struct  Format  fmt_RRRN_2r	= {2, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}}};
@@ -343,9 +346,9 @@ struct Instr opcodes[] = {
 	{ "waiti",  0x007000, 0xfff0ff, &fmt_RRR_1imm },
 	{ "wdtlb",  0x50e000, 0xfff00f, &fmt_RRR_2r },
 	{ "witlb",  0x506000, 0xfff00f, &fmt_RRR_2r },
-	{ "wsr",    0x130000, 0xff000f, &fmt_RSR },
+	{ "wsr",    0x130000, 0xff000f, &fmt_WSR },
 	{ "xor",    0x300000, 0xff000f, &fmt_RRR },
-	{ "xsr",    0x610000, 0xff000f, &fmt_RSR },
+	{ "xsr",    0x610000, 0xff000f, &fmt_XSR },
 //	{ "movi*",   0x000001, 0x000000, &fmt_NONE },
 
 	{ "add.n",   0x000a, 0x000f, &fmt_RRRN },
@@ -470,7 +473,13 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 		if(in->xlate)
 			val = in->xlate(val);
 
+		out->accessMode = DISASM_ACCESS_READ;
+
 		switch(in->type) {
+		case Operand_REGW:
+			out->accessMode = DISASM_ACCESS_WRITE;
+		case Operand_REGRW:
+			out->accessMode |= DISASM_ACCESS_WRITE;
 		case Operand_REG:
 			out->type = DISASM_OPERAND_REGISTER_TYPE;
 			if(val & 0x1000) {// special register
