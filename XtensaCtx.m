@@ -58,7 +58,14 @@
 - (BOOL)hasProcedurePrologAt:(Address)address {
 	// procedures usually begins with a "addi a1, a1 -X"
 	uint32_t word = [self readWordAt:address];
-	return (word & 0x00ffff) == 0xc112; // this is XXc112, not a 2-byte instruction
+	if((word & 0x00ffff) == 0xc112) // this is XXc112, not a 2-byte instruction
+		return true;
+
+	// or, "entry a1, ??"
+	if((word & 0x000fff) == 0x136)
+		return true;
+
+	return false;
 }
 
 - (NSUInteger)detectedPaddingLengthAt:(Address)address {
@@ -125,6 +132,7 @@ enum OperandType {
 	Operand_MEM_INDEX,
 	Operand_RELU,
 
+	// always sign-extended
 	Operand_RELA,
 	Operand_RELAL,
 	Operand_MEM,
@@ -139,7 +147,9 @@ struct Operand {
 	int vshift, off;
 	xlatefun_t xlate;
 	int bitwidth; // default = 8
-	int regbase[2];
+	struct {
+		int size, shift;
+	} regbase;
 };
 
 struct Format {
@@ -236,6 +246,11 @@ struct  Format  fmt_RRRN_2r	= {2, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}}};
 struct  Format  fmt_RRRN_disp	= {2, {{Operand_REG, 4, 4}, {Operand_MEM_INDEX, 4, 12, .vshift=2, .regbase={4, 8}}}};
 struct  Format  fmt_RI6		= {2, {{Operand_REG, 4, 8}, {Operand_RELU, 4, 12, 2, 4}}};
 struct  Format  fmt_RI7		= {2, {{Operand_REG, 4, 8}, {Operand_IMM, 4, 12, 3, 4, .xlate=movi_n}}};
+
+struct  Format  fmt_RI12_entry	= {3, {{Operand_REG, 4, 8}, {Operand_IMM, 12, 12, .vshift=3}}};
+struct  Format  fmt_I4 		= {3, {{Operand_IMM, 4, 4, .signext = true}}};
+struct  Format  fmt_RRI4	= {3, {{Operand_REG, 4, 4}, {Operand_REG, 4, 8}, {Operand_MEM_INDEX, 4, 12, .signext = true}}};
+struct  Format  fmt_RRI8_i12_l	= {3, {{Operand_REG, 4, 8}, {Operand_RELU, 8, 16, .bitwidth = 16 }}};
 
 struct Instr opcodes[] = {
 	{ "abs",    0x600100, 0xff0f0f, &fmt_RRR_2rr },
@@ -344,6 +359,54 @@ struct Instr opcodes[] = {
 	{ "movi.n",  0x000c, 0x008f, &fmt_RI7 },
 	{ "nop.n",   0xf03d, 0xffff, &fmt_NNONE },
 	{ "s32i.n",  0x0009, 0x000f, &fmt_RRRN_disp },
+	
+	{ "simcall",  0x005100, 0xffffff, &fmt_NONE },
+
+	{ NULL }
+};
+
+struct Instr opcodes_lx6[] = {
+// Register Windowing
+	{ "movsp",  0x001000, 0xfff00f, &fmt_RRR_2r },
+	{ "call4",  0x000015, 0x00003f, &fmt_CALL_sh, DISASM_BRANCH_CALL }, // ok
+	{ "call8",  0x000025, 0x00003f, &fmt_CALL_sh, DISASM_BRANCH_CALL }, // ok
+	{ "call12", 0x000035, 0x00003f, &fmt_CALL_sh, DISASM_BRANCH_CALL }, // ok
+	{ "callx4", 0x0000d0, 0xfff0ff, &fmt_CALLX, DISASM_BRANCH_CALL }, // ok
+	{ "callx8", 0x0000e0, 0xfff0ff, &fmt_CALLX, DISASM_BRANCH_CALL }, // ok
+	{ "callx12",0x0000f0, 0xfff0ff, &fmt_CALLX, DISASM_BRANCH_CALL }, // ok
+	{ "entry",  0x000036, 0x0000ff, &fmt_RI12_entry }, // ok
+	{ "retw",   0x000090, 0xffffff, &fmt_NONE, DISASM_BRANCH_RET },
+	{ "retw.n",   0xf01d,   0xffff, &fmt_NNONE, DISASM_BRANCH_RET },
+	{ "rotw",   0x408000, 0xffff0f, &fmt_I4 },
+	{ "l32e",   0x090000, 0xff000f, &fmt_RRI4 }, // FIXME
+	{ "s32e",   0x490000, 0xff000f, &fmt_RRI4 },
+	{ "rfwo",   0x003400, 0xffffff, &fmt_NONE, DISASM_BRANCH_RET },
+	{ "rfwu",   0x003500, 0xffffff, &fmt_NONE, DISASM_BRANCH_RET },
+
+// 32-Bit Integer Multiply
+	{ "mull",   0x820000, 0xff000f, &fmt_RRR },
+	{ "muluh",  0xa20000, 0xff000f, &fmt_RRR },
+	{ "mulsh",  0xb20000, 0xff000f, &fmt_RRR },
+// 32-Bit Integer Divide
+	{ "quos",   0xd20000, 0xff000f, &fmt_RRR },
+	{ "quou",   0xc20000, 0xff000f, &fmt_RRR },
+	{ "rems",   0xf20000, 0xff000f, &fmt_RRR },
+	{ "remu",   0xe20000, 0xff000f, &fmt_RRR },
+
+// Misc Operations
+	{ "clamps", 0x330000, 0xff000f, &fmt_RRR },
+	{ "max",    0x530000, 0xff000f, &fmt_RRR },
+	{ "maxu",   0x730000, 0xff000f, &fmt_RRR },
+	{ "min",    0x430000, 0xff000f, &fmt_RRR },
+	{ "minu",   0x630000, 0xff000f, &fmt_RRR },
+	{ "nsa",    0x40e000, 0xfff00f, &fmt_RRR_2r },
+	{ "nsau",   0x40f000, 0xff000f, &fmt_RRR_2r },
+	{ "sext",   0x230000, 0xff000f, &fmt_RRR },
+
+// Loop option
+	{ "loop",   0x008076, 0x00f0ff, &fmt_RRI8_i12_l },
+	{ "loopgtz",0x00a076, 0x00f0ff, &fmt_RRI8_i12_l },
+	{ "loopnez",0x009076, 0x00f0ff, &fmt_RRI8_i12_l },
 
 	{ NULL }
 };
@@ -353,17 +416,26 @@ static inline uint32_t bitfield(uint32_t op, int size, int shift)
 	return (op >> shift) & ((1<<size)-1);
 }
 
+const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
+{
+	for(;;i++) {
+		if(i->mnemonic == NULL)
+			return NULL;
+
+		if((insn & i->mask) == i->opcode)
+			return i;
+	}
+}
+
 - (int)disassembleSingleInstruction:(DisasmStruct *)disasm usingProcessorMode:(NSUInteger)mode {
 	if (disasm->bytes == NULL) return DISASM_UNKNOWN_OPCODE;
 	uint32_t insn = [self readWordAt:disasm->virtualAddr];
-	const struct Instr *i = opcodes;
-	for(;;i++) {
-		if(i->mnemonic == NULL)
-			return DISASM_UNKNOWN_OPCODE;
+	const struct Instr *i = find_instruction(opcodes, insn);
+	if(!i) 
+		i = find_instruction(opcodes_lx6, insn);
 
-		if((insn & i->mask) == i->opcode)
-			break;
-	}
+	if(!i)
+		return DISASM_UNKNOWN_OPCODE;
 
 	disasm->instruction.branchType = i->branchType;
 	disasm->instruction.addressValue = 0;
