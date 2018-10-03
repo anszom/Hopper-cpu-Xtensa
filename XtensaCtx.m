@@ -500,6 +500,7 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 			out->type = DISASM_OPERAND_MEMORY_TYPE;
 			//out->type |= DISASM_BUILD_REGISTER_CLS_MASK(RegClass_GeneralPurposeRegister);
 			//((disasm->virtualAddr + 3) & (~3)) + val;
+			disasm->instruction.addressValue = 
 			out->immediateValue = 
 			out->memory.displacement = ((disasm->virtualAddr + 3) & (~3)) + val * 4;
 
@@ -511,6 +512,7 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 			break;
 
 		case Operand_RELA:
+		case Operand_RELU:
 			out->type = DISASM_OPERAND_CONSTANT_TYPE | DISASM_OPERAND_RELATIVE;
 			disasm->instruction.addressValue = 
 			out->memory.displacement = 
@@ -520,18 +522,21 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 
 		case Operand_RELAL:
 			out->type = DISASM_OPERAND_CONSTANT_TYPE | DISASM_OPERAND_RELATIVE;
+			disasm->instruction.addressValue = 
+			out->memory.displacement = 
 			out->immediateValue = (disasm->virtualAddr & (~3)) + 4 + (val<<2);
+			out->isBranchDestination = 1;
 			break;
 
-		case Operand_RELU:
-			out->type = DISASM_OPERAND_CONSTANT_TYPE | DISASM_OPERAND_RELATIVE;
-			// FIXME
-			break;
-
-		case Operand_MEM_INDEX:
+		case Operand_MEM_INDEX: {
+			int reg = bitfield(insn, in->regbase.size, in->regbase.shift);
 			out->type = DISASM_OPERAND_MEMORY_TYPE;
-			// FIXME
-			break;
+			out->type |= DISASM_BUILD_REGISTER_CLS_MASK(RegClass_GeneralPurposeRegister);
+			out->type |= DISASM_BUILD_REGISTER_INDEX_MASK(reg);
+			out->memory.displacement = val;
+			out->memory.baseRegistersMask = DISASM_BUILD_REGISTER_INDEX_MASK(reg);
+			out->memory.scale = 1;
+			break; }
 
 		default:
 			break;
@@ -604,11 +609,9 @@ static inline int regIndexFromType(uint64_t type) {
 	NSObject<HPASMLine> *line = [services blankASMLine];
 
 	if (operand->type & DISASM_OPERAND_CONSTANT_TYPE) {
-		if (disasm->instruction.branchType) {
+		if (disasm->instruction.branchType) 
 			if (format == Format_Default) format = Format_Address;
-		} else {
-//			[line appendRawString:@"#"];
-		}
+
 		[line append:[file formatNumber:operand->immediateValue at:disasm->virtualAddr usingFormat:format andBitSize:32]];
 
 	} else if (operand->type & DISASM_OPERAND_REGISTER_TYPE) {
@@ -619,10 +622,22 @@ static inline int regIndexFromType(uint64_t type) {
 						ofClass:regCls
 						withBitSize:32
 						position:DISASM_LOWPOSITION
-						andSyntaxIndex:file.userRequestedSyntaxIndex ]];
+						andSyntaxIndex:file.userRequestedSyntaxIndex ]
+			ofClass: regCls andIndex:regIdx ];
 
 	} else if (operand->type & DISASM_OPERAND_MEMORY_TYPE) {
-		if(false) {
+		if(DISASM_GET_REGISTER_CLS_MASK(operand->type)) {
+			RegClass regCls = regClassFromType(operand->type);
+			int regIdx = regIndexFromType(operand->type);
+			[line appendRegister:[_cpu registerIndexToString:regIdx
+							ofClass:regCls
+							withBitSize:32
+							position:DISASM_LOWPOSITION
+							andSyntaxIndex:file.userRequestedSyntaxIndex ]
+				ofClass: regCls andIndex:regIdx ];
+			[line appendRawString:@", "];
+			[line append:[file formatNumber:operand->memory.displacement at:disasm->virtualAddr usingFormat:format andBitSize:32]];
+
 		} else {
 			if(operand->userData[0]) {
 				[line appendRawString:@"="];
