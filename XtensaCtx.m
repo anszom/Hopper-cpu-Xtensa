@@ -502,7 +502,12 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 			//((disasm->virtualAddr + 3) & (~3)) + val;
 			out->immediateValue = 
 			out->memory.displacement = ((disasm->virtualAddr + 3) & (~3)) + val * 4;
-			[_file setType:Type_Int32 atVirtualAddress: out->immediateValue forLength: 4];
+
+			if([_file sectionForVirtualAddress:out->immediateValue]) {
+				out->immediateValue = [_file readUInt32AtVirtualAddress:out->immediateValue];
+				out->userData[0] = 1; // mark as resolved
+			}
+
 			break;
 
 		case Operand_RELA:
@@ -545,7 +550,14 @@ const struct Instr *find_instruction(const struct Instr *i, uint32_t insn)
 }
 
 - (void)performInstructionSpecificAnalysis:(DisasmStruct *)disasm forProcedure:(NSObject<HPProcedure> *)procedure inSegment:(NSObject<HPSegment> *)segment {
+	for (int op_index=0; op_index < DISASM_MAX_OPERANDS; op_index++) {
+		DisasmOperand *operand = &disasm->operand[op_index];
 
+		if((operand->type & DISASM_OPERAND_MEMORY_TYPE) && operand->userData[0] == 1) {
+			// l32r
+			[_file setType:Type_Int32 atVirtualAddress: operand->memory.displacement forLength: 4];
+		}
+	}
 }
 
 - (void)performProcedureAnalysis:(NSObject<HPProcedure> *)procedure basicBlock:(NSObject<HPBasicBlock> *)basicBlock disasm:(DisasmStruct *)disasm {
@@ -612,11 +624,14 @@ static inline int regIndexFromType(uint64_t type) {
 	} else if (operand->type & DISASM_OPERAND_MEMORY_TYPE) {
 		if(false) {
 		} else {
-			if([file sectionForVirtualAddress:operand->immediateValue]) {
-				uint32_t val = [file readUInt32AtVirtualAddress:operand->immediateValue];
+			if(operand->userData[0]) {
 				[line appendRawString:@"="];
-				[line append:[file formatNumber:val at:disasm->virtualAddr usingFormat:format andBitSize:32]];
+			} else {
+				if(format == Format_Default)
+					format = Format_Address;
 			}
+
+			[line append:[file formatNumber:operand->immediateValue at:disasm->virtualAddr usingFormat:format andBitSize:32]];
 		}
 
 	} else {
@@ -639,7 +654,7 @@ static inline int regIndexFromType(uint64_t type) {
 
 	NSObject<HPASMLine> *line = [services blankASMLine];
 
-	for (int op_index=0; op_index <= DISASM_MAX_OPERANDS; op_index++) {
+	for (int op_index=0; op_index < DISASM_MAX_OPERANDS; op_index++) {
 		NSObject<HPASMLine> *part = [self buildOperandString:disasm forOperandIndex:op_index inFile:file raw:raw];
 		if (part == nil) break;
 		if (op_index) [line appendRawString:@", "];
